@@ -2,18 +2,18 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 
-# Example yield data (replace with actual or real-time data if needed)
+# yield data (replace with actual or real-time data if needed)
 money_market_start = {
     "1 mo.": 4.40, "2 mo.": 4.39, "3 mo.": 4.37, "4 mo.": 4.32, "6 mo.": 4.24, "1 yr.": 4.16
 }
 money_market_current = {
-    "1 mo.": 4.37, "2 mo.": 4.38, "3 mo.": 4.34, "4 mo.": 4.35, "6 mo.": 4.21, "1 yr.": 4.04
+    "1 mo.": 4.34, "2 mo.": 4.36, "3 mo.": 4.32, "4 mo.": 4.32, "6 mo.": 4.22, "1 yr.": 3.95
 }
 capital_market_start = {
     "2 yr.": 4.25, "3 yr.": 4.27, "5 yr.": 4.38, "7 yr.": 4.48, "10 yr.": 4.58, "20 yr.": 4.86, "30 yr.": 4.78
 }
 capital_market_current = {
-    "2 yr.": 3.96, "3 yr.": 3.98, "5 yr.": 4.15, "7 yr.": 4.32, "10 yr.": 4.48, "20 yr.": 4.91, "30 yr.": 4.85
+    "2 yr.": 3.74, "3 yr.": 3.76, "5 yr.": 3.88, "7 yr.": 4.06, "10 yr.": 4.29, "20 yr.": 4.75, "30 yr.": 4.74
 }
 
 # Combine for continuity between 1 yr. and 2 yr.
