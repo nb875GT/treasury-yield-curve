@@ -1,106 +1,86 @@
-import streamlit as st 
-import pandas as pd
-import numpy as np
+import streamlit as st
 import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from tiingo import TiingoClient
+from fredapi import Fred
+from datetime import datetime, timedelta
 
-# Tiingo API configuration
-config = {
-    'session': True,
-    'api_key': '87ea448a4e01f7ee751f5ea680ce9a25e10b18a9'  # Replace with your actual API key
+# Configure Streamlit
+st.set_page_config(page_title="Treasury Yield Curve", layout="wide")
+st.title("Treasury Yield Curve")
+
+# Setup FRED
+fred = Fred(api_key=st.secrets["fred_api_key"])
+
+# Dates
+today = datetime.today()
+fallback_date = today - timedelta(days=1 if today.weekday() > 0 else 3)
+today_str = today.strftime('%Y-%m-%d')
+start_str = '2024-12-31'
+end_str = fallback_date.strftime('%Y-%m-%d')
+
+# FRED tickers
+money_market_tickers = {
+    "1 mo.": "DTB1",
+    "2 mo.": "DTB2",
+    "3 mo.": "DTB3",
+    "4 mo.": "DTB4WK",
+    "6 mo.": "DTB6",
+    "1 yr.": "GS1"
 }
-client = TiingoClient(config)
+capital_market_tickers = {
+    "2 yr.": "GS2",
+    "3 yr.": "GS3",
+    "5 yr.": "GS5",
+    "7 yr.": "GS7",
+    "10 yr.": "GS10",
+    "20 yr.": "GS20",
+    "30 yr.": "GS30"
+}
 
-# Set Streamlit page config
-st.set_page_config(page_title="TLT Monthly Return Clustering", layout="wide", initial_sidebar_state="auto")
+def get_yields(ticker_dict, target_date):
+    data = {}
+    for label, code in ticker_dict.items():
+        try:
+            series = fred.get_series(code, start_date="2024-12-15", end_date=target_date)
+            data[label] = round(series.dropna().iloc[-1], 2)
+        except:
+            data[label] = None
+    return data
 
-# Title
-st.title("K-Means Clustering of TLT Monthly Returns")
+# Get yield data
+money_market_start = get_yields(money_market_tickers, start_str)
+money_market_current = get_yields(money_market_tickers, end_str)
+capital_market_start = get_yields(capital_market_tickers, start_str)
+capital_market_current = get_yields(capital_market_tickers, end_str)
 
-# Date range setup
-start_date = '2014-06-01'
-end_date = pd.Timestamp.today().strftime('%Y-%m-%d')
+# Build chart points
+money_x = list(money_market_start.keys()) + ["2 yr."]
+money_y_start = list(money_market_start.values()) + [capital_market_start.get("2 yr.")]
+money_y_current = list(money_market_current.values()) + [capital_market_current.get("2 yr.")]
 
-# Download data from Tiingo
-try:
-    df = client.get_dataframe("TLT", startDate=start_date, endDate=end_date, frequency='daily')
-    df.index = df.index.tz_localize(None)
-except Exception as e:
-    st.error(f"Failed to fetch data from Tiingo: {e}")
-    st.stop()
+capital_x = ["1 yr."] + list(capital_market_start.keys())
+capital_y_start = [money_market_start.get("1 yr.")] + list(capital_market_start.values())
+capital_y_current = [money_market_current.get("1 yr.")] + list(capital_market_current.values())
 
-# Calculate monthly returns
-monthly_prices = df['adjClose'].resample('ME').last()
-monthly_returns = monthly_prices.pct_change().dropna() * 100
-
-if monthly_returns.empty:
-    st.error("Monthly returns could not be calculated. Check the price data.")
-    st.stop()
-
-monthly_returns_df = monthly_returns.to_frame(name='Return')
-monthly_returns_df['Month'] = monthly_returns_df.index.month
-monthly_returns_df['MonthName'] = monthly_returns_df.index.month_name()
-monthly_returns_df['Year'] = monthly_returns_df.index.year
-
-# Monthly averages
-month_order = ['January', 'February', 'March', 'April', 'May', 'June',
-               'July', 'August', 'September', 'October', 'November', 'December']
-monthly_avg = monthly_returns_df.groupby('MonthName')['Return'].mean().reindex(month_order).fillna(0)
-monthly_avg_values = monthly_avg.values.reshape(-1, 1)
-
-# KMeans clustering
-kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-labels = kmeans.fit_predict(monthly_avg_values)
-
-# Color coding
-colors = ['green' if val >= 0 else 'red' for val in monthly_avg.values]
-
-# Most recent month info
-try:
-    most_recent_month = monthly_returns_df.index[-1].month_name()
-    most_recent_return = monthly_returns_df.iloc[-1]['Return']
-    historical_avg = monthly_avg[most_recent_month]
-    difference = most_recent_return - historical_avg
-except Exception as e:
-    st.error(f"Error retrieving most recent return data: {e}")
-    st.stop()
-
-# Subtitle string
-subtitle_str = ', '.join([
-    f"{month[:3]}: {val:.2f}%" for month, val in zip(monthly_avg.index, monthly_avg.values)
-])
-
-# Plot
-fig, ax = plt.subplots(figsize=(14, 8))
-fig.patch.set_facecolor('black')
+# Plot setup
+plt.style.use('dark_background')
+fig, ax = plt.subplots(figsize=(12, 6))
 ax.set_facecolor('black')
-bars = ax.bar(monthly_avg.index, monthly_avg.values, color=colors)
-ax.axhline(0, color='white', linewidth=0.8)
 
-recent_idx = monthly_avg.index.tolist().index(most_recent_month)
-bars[recent_idx].set_edgecolor('white')
-bars[recent_idx].set_linewidth(2)
-ax.text(recent_idx, monthly_avg.iloc[recent_idx] + 0.2,
-        f"{most_recent_return:.2f}%\n({'+' if difference > 0 else ''}{difference:.2f}%)",
-        ha='center', va='bottom', fontsize=10, fontweight='bold', color='white')
+# Plot curves
+ax.plot(money_x, money_y_start, color='skyblue', marker='o', label='Money Market Yield (01/01/2025)')
+ax.plot(money_x, money_y_current, color='blue', marker='o', label='Money Market Yield (Current)')
+ax.plot(capital_x, capital_y_start, color='sandybrown', marker='s', label='Capital Market Yield (01/01/2025)')
+ax.plot(capital_x, capital_y_current, color='darkorange', marker='s', label='Capital Market Yield (Current)')
 
-ax.set_title("K-Means Clustering of Average Monthly Returns for TLT (Last 10 Years)",
-             color='white', fontsize=16, pad=20)
-ax.set_xlabel(subtitle_str, color='white', fontsize=10, labelpad=20)
-ax.set_ylabel("Average Return (%)", color='white')
-ax.tick_params(colors='white')
-plt.xticks(rotation=45)
-ax.grid(axis='y', linestyle='--', alpha=0.3, color='white')
-plt.tight_layout()
+# Labels
+ax.set_title("Treasury Yield Curve", fontsize=16, color='white')
+ax.set_xlabel("Maturity (months - years)", fontsize=12, color='white')
+ax.set_ylabel("Yield (%)", fontsize=12, color='white')
+ax.tick_params(axis='x', colors='white', rotation=45)
+ax.tick_params(axis='y', colors='white')
+ax.grid(True, linestyle='--', alpha=0.5)
+ax.legend()
 
-# Show in Streamlit
+# Streamlit output
 st.pyplot(fig)
-
-# Optional: Display data tables
-with st.expander("Show Monthly Average Returns"):
-    st.dataframe(monthly_avg.round(2))
-
-with st.expander("Show Raw Monthly Returns"):
-    st.dataframe(monthly_returns_df[['Return', 'MonthName', 'Year']].sort_index(ascending=False))
 
