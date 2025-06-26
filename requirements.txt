@@ -1,6 +1,4 @@
 streamlit
-tiingo
-pandas
-numpy
 matplotlib
-scikit-learn
+pandas
+fredapi
